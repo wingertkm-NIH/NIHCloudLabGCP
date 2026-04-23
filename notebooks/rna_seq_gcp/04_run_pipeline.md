@@ -1,4 +1,4 @@
-# 04: Download data and run a simple RNA-seq pipeline
+# 04: Download data and run a simple RNA-seq pipeline (two samples)
 
 Run these commands on the VM.
 
@@ -9,25 +9,28 @@ mkdir -p ~/rna_seq_tutorial/{data,ref,results,logs}
 cd ~/rna_seq_tutorial
 ```
 
-## 2) Download one small public RNA-seq sample
+## 2) Download two small public RNA-seq samples
 
-Dataset used in this tutorial:
+Datasets used in this tutorial:
 - **SRA accession:** `SRR453566` (*S. cerevisiae*, single-end)
+- **SRA accession:** `SRR453567` (*S. cerevisiae*, single-end)
 - Source: ENA FASTQ mirror
 
 ```bash
 cd ~/rna_seq_tutorial/data
 wget -O SRR453566.fastq.gz \
   https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR453/006/SRR453566/SRR453566.fastq.gz
+wget -O SRR453567.fastq.gz \
+  https://ftp.sra.ebi.ac.uk/vol1/fastq/SRR453/007/SRR453567/SRR453567.fastq.gz
 ```
 
 Expected output:
-- `SRR453566.fastq.gz` appears in `~/rna_seq_tutorial/data`.
+- `SRR453566.fastq.gz` and `SRR453567.fastq.gz` appear in `~/rna_seq_tutorial/data`.
 
 Quick check:
 
 ```bash
-ls -lh ~/rna_seq_tutorial/data/SRR453566.fastq.gz
+ls -lh ~/rna_seq_tutorial/data/SRR453566.fastq.gz ~/rna_seq_tutorial/data/SRR453567.fastq.gz
 ```
 
 ## 3) Download reference transcriptome + annotation (Ensembl)
@@ -51,11 +54,11 @@ zgrep -m 2 -v '^#' sacCer3.111.gtf.gz
 
 ```bash
 cd ~/rna_seq_tutorial
-fastqc -o results data/SRR453566.fastq.gz
+fastqc -o results data/SRR453566.fastq.gz data/SRR453567.fastq.gz
 ```
 
 Expected output:
-- Files like `SRR453566_fastqc.html` and `SRR453566_fastqc.zip` in `results/`.
+- Files like `SRR453566_fastqc.html`, `SRR453567_fastqc.html` and matching `.zip` files in `results/`.
 
 ## 5) Build Salmon index
 
@@ -72,22 +75,57 @@ Expected output:
 - `ref/salmon_index/` directory created,
 - final log lines indicate indexing completed.
 
-## 6) Quantify expression with Salmon
+## 6) Quantify expression with Salmon for both samples
 
 ```bash
 cd ~/rna_seq_tutorial
-salmon quant \
-  -i ref/salmon_index \
-  -l A \
-  -r data/SRR453566.fastq.gz \
-  -p 2 \
-  --validateMappings \
-  -o results/salmon_SRR453566 \
-  2>&1 | tee logs/salmon_quant.log
+for SAMPLE in SRR453566 SRR453567; do
+  salmon quant \
+    -i ref/salmon_index \
+    -l A \
+    -r data/${SAMPLE}.fastq.gz \
+    -p 2 \
+    --validateMappings \
+    -o results/salmon_${SAMPLE} \
+    2>&1 | tee logs/salmon_quant_${SAMPLE}.log
+done
 ```
 
 Expected output:
 - `results/salmon_SRR453566/quant.sf` is created.
+- `results/salmon_SRR453567/quant.sf` is created.
+
+## 7) Create transcript-to-gene mapping table (`tx2gene.tsv`)
+
+Run this command from `~/rna_seq_tutorial`:
+
+```bash
+zcat ref/sacCer3.111.gtf.gz \
+  | awk 'BEGIN{FS="\t"; OFS="\t"}
+         $3=="transcript" {
+           tid=""; gid="";
+           if (match($9, /transcript_id "[^"]+"/)) {
+             tid=substr($9, RSTART+15, RLENGTH-16)
+           }
+           if (match($9, /gene_id "[^"]+"/)) {
+             gid=substr($9, RSTART+9, RLENGTH-10)
+           }
+           if (tid!="" && gid!="") print tid, gid
+         }' \
+  | sort -u > results/tx2gene.tsv
+```
+
+Expected output:
+- `results/tx2gene.tsv` is created as a two-column tab-delimited file:
+  - column 1: transcript ID
+  - column 2: gene ID
+
+Quick check:
+
+```bash
+head -n 5 results/tx2gene.tsv
+wc -l results/tx2gene.tsv
+```
 
 Troubleshooting:
 - If download fails, retry `wget` (temporary network issues are common).
