@@ -1,6 +1,6 @@
 # 02: Create a VM and SSH into it
 
-Use these steps from Cloud Shell or your local terminal.
+Use these steps from Cloud Shell.
 
 ## 1) Set variables
 
